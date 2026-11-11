@@ -104,6 +104,32 @@ function rellenar(arr, nuevo) {
 // Reemplaza todo el contenido cortado de un elemento (p. ej. el que tiene aria-label) por otro texto:
 // se queda con la primera "línea", la llena con el texto nuevo y borra las demás.
 // pares: lista donde se anotan [htmlViejo, htmlNuevo] para corregir también el HTML grabado.
+// Todos los arrays cortados de un elemento, en orden (sin entrar en uno ya encontrado): cada uno es un renglón
+function todosCortados(n, salida = []) {
+  if (Array.isArray(n) && !esElemento(n)) {
+    if (piezasDe(n)) { salida.push(n); return salida; }
+    for (const h of n) todosCortados(h, salida);
+  } else if (esElemento(n)) todosCortados(n[3].children, salida);
+  return salida;
+}
+
+// Reparte un texto en n renglones de largo parecido, sin cortar palabras
+function repartir(texto, n) {
+  const palabras = texto.split(/\s+/).filter(Boolean);
+  if (palabras.length <= n) return Array.from({ length: n }, (_, i) => palabras[i] || '');
+  const lineas = [];
+  let resto = palabras;
+  for (let i = n; i > 1; i--) {
+    const objetivo = resto.join(' ').length / i;
+    let actual = resto[0], k = 1;
+    while (k < resto.length - (i - 1) && Math.abs((actual + ' ' + resto[k]).length - objetivo) <= Math.abs(actual.length - objetivo)) actual += ' ' + resto[k++];
+    lineas.push(actual);
+    resto = resto.slice(k);
+  }
+  lineas.push(resto.join(' '));
+  return lineas;
+}
+
 function reescribirElemento(el, nuevo, pares = []) {
   const props = el[3];
   const hijos = props.children;
@@ -111,6 +137,20 @@ function reescribirElemento(el, nuevo, pares = []) {
   if (!cortado) {
     if (typeof hijos === 'string') { props.children = nuevo; return true; }
     return reescribirTramos(hijos, nuevo, pares);
+  }
+  // Si el texto está en varios renglones, se reparte el nuevo en la misma cantidad (así no se rompe el diseño)
+  const renglones = todosCortados(hijos);
+  if (renglones.length > 1) {
+    repartir(nuevo, renglones.length).forEach((texto, i) => {
+      const r = renglones[i];
+      const viejo = aHtml(r);
+      const lleno = rellenar(r, texto);
+      r.length = 0;
+      r.push(...lleno);
+      const nuevoHtml = aHtml(r);
+      if (viejo && nuevoHtml) pares.push([viejo, nuevoHtml]);
+    });
+    return true;
   }
   const viejoHtml = aHtml(cortado);
   const lleno = rellenar(cortado, nuevo);
